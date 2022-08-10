@@ -39,6 +39,7 @@ func init() {
 func (c *Controller) Start() error {
 	// TODO: get rid of this init code. CRD and storage class will be managed outside of operator.
 	for {
+		// 向apiserver创建crd
 		err := c.initResource()
 		if err == nil {
 			break
@@ -48,7 +49,9 @@ func (c *Controller) Start() error {
 		time.Sleep(initRetryWaitTime)
 	}
 
+	// 没看
 	probe.SetReady()
+	// 运行controller
 	c.run()
 	panic("unreachable")
 }
@@ -58,15 +61,18 @@ func (c *Controller) run() {
 	if c.Config.ClusterWide {
 		ns = metav1.NamespaceAll
 	} else {
+		// default
 		ns = c.Config.Namespace
 	}
 
+	// source是一个ListWatch结构体
 	source := cache.NewListWatchFromClient(
 		c.Config.EtcdCRCli.EtcdV1beta2().RESTClient(),
 		api.EtcdClusterResourcePlural,
 		ns,
 		fields.Everything())
-
+	// 在此处会创建DeltaFIFO，用于存储从apiserver读取的crd事件
+	// 同时注册从DeltaFIFO读取事件后的事件处理方法
 	_, informer := cache.NewIndexerInformer(source, &api.EtcdCluster{}, 0, cache.ResourceEventHandlerFuncs{
 		AddFunc:    c.onAddEtcdClus,
 		UpdateFunc: c.onUpdateEtcdClus,
@@ -75,6 +81,9 @@ func (c *Controller) run() {
 
 	ctx := context.TODO()
 	// TODO: use workqueue to avoid blocking
+	// 运行informer
+	// 在此处会创建reflector用于执行ListAndWatch从apiserver读取crd的事件放入DeltaFIFO
+	// 同时运行processLoop从DeltaFIFO中读取事件
 	informer.Run(ctx.Done())
 }
 

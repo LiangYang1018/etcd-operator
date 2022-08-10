@@ -57,7 +57,8 @@ func New(cfg Config) *Controller {
 	return &Controller{
 		logger: logrus.WithField("pkg", "controller"),
 
-		Config:   cfg,
+		Config: cfg,
+		// 用于创建多集群
 		clusters: make(map[string]*cluster.Cluster),
 	}
 }

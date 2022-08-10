@@ -425,12 +425,14 @@ func MustNewKubeClient() kubernetes.Interface {
 	if err != nil {
 		panic(err)
 	}
+	// 此处返回一个Clientset
 	return kubernetes.NewForConfigOrDie(cfg)
 }
 
 func InClusterConfig() (*rest.Config, error) {
 	// Work around https://github.com/kubernetes/kubernetes/issues/40973
 	// See https://github.com/coreos/etcd-operator/issues/731#issuecomment-283804819
+	// pod内部环境变量：export KUBERNETES_SERVICE_HOST='10.96.0.1'
 	if len(os.Getenv("KUBERNETES_SERVICE_HOST")) == 0 {
 		addrs, err := net.LookupHost("kubernetes.default.svc")
 		if err != nil {
@@ -438,6 +440,7 @@ func InClusterConfig() (*rest.Config, error) {
 		}
 		os.Setenv("KUBERNETES_SERVICE_HOST", addrs[0])
 	}
+	// pod内部环境变量：export KUBERNETES_SERVICE_PORT='443'
 	if len(os.Getenv("KUBERNETES_SERVICE_PORT")) == 0 {
 		os.Setenv("KUBERNETES_SERVICE_PORT", "443")
 	}

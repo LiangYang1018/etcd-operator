@@ -73,15 +73,19 @@ func init() {
 }
 
 func main() {
+	// pod中的环境变量：export MY_POD_NAMESPACE='default'
 	namespace = os.Getenv(constants.EnvOperatorPodNamespace)
 	if len(namespace) == 0 {
 		logrus.Fatalf("must set env (%s)", constants.EnvOperatorPodNamespace)
 	}
+
+	// pod中的环境变量：export MY_POD_NAME='etcd-operator-55978c4587-7r8dn'
 	name = os.Getenv(constants.EnvOperatorPodName)
 	if len(name) == 0 {
 		logrus.Fatalf("must set env (%s)", constants.EnvOperatorPodName)
 	}
 
+	// printVersion: false
 	if printVersion {
 		fmt.Println("etcd-operator Version:", version.Version)
 		fmt.Println("Git SHA:", version.GitSHA)
@@ -95,17 +99,20 @@ func main() {
 	logrus.Infof("Go Version: %s", runtime.Version())
 	logrus.Infof("Go OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH)
 
+	//echo $HOSTNAME : master似乎仅用于raft选举中的标识
 	id, err := os.Hostname()
 	if err != nil {
 		logrus.Fatalf("failed to get hostname: %v", err)
 	}
-
+	// 返回一个Clientset用于pod与apiserver通信
 	kubecli := k8sutil.MustNewKubeClient()
 
+	//似乎与监控相关暂时没用到
 	http.HandleFunc(probe.HTTPReadyzEndpoint, probe.ReadyzHandler)
 	http.Handle("/metrics", prometheus.Handler())
 	go http.ListenAndServe(listenAddr, nil)
 
+	// rl用于raft竞选
 	rl, err := resourcelock.New(resourcelock.EndpointsResourceLock,
 		namespace,
 		"etcd-operator",
@@ -118,15 +125,17 @@ func main() {
 		logrus.Fatalf("error creating lock: %v", err)
 	}
 
+	//用于关闭
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
+	//用于创建多etcd operator实例时选举出leader
 	leaderelection.RunOrDie(ctx, leaderelection.LeaderElectionConfig{
 		Lock:          rl,
 		LeaseDuration: 15 * time.Second,
 		RenewDeadline: 10 * time.Second,
 		RetryPeriod:   2 * time.Second,
 		Callbacks: leaderelection.LeaderCallbacks{
+			// leader: 运行run方法
 			OnStartedLeading: run,
 			OnStoppedLeading: func() {
 				logrus.Fatalf("leader election lost")
@@ -138,18 +147,23 @@ func main() {
 }
 
 func run(ctx context.Context) {
+	// 用于关闭
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	cfg := newControllerConfig()
 
+	// 没看
 	startChaos(context.Background(), cfg.KubeCli, cfg.Namespace, chaosLevel)
 
+	// 创建一个controller
 	c := controller.New(cfg)
+	// 启动controller
 	err := c.Start()
 	logrus.Fatalf("controller Start() failed: %v", err)
 }
 
 func newControllerConfig() controller.Config {
+	// 返回一个Clientset用于pod与apiserver通信
 	kubecli := k8sutil.MustNewKubeClient()
 
 	serviceAccount, err := getMyPodServiceAccount(kubecli)
@@ -158,13 +172,16 @@ func newControllerConfig() controller.Config {
 	}
 
 	cfg := controller.Config{
-		Namespace:      namespace,
+		Namespace: namespace,
+		// bool: false
 		ClusterWide:    clusterWide,
 		ServiceAccount: serviceAccount,
 		KubeCli:        kubecli,
-		KubeExtCli:     k8sutil.MustNewKubeExtClient(),
-		EtcdCRCli:      client.MustNewInCluster(),
-		CreateCRD:      createCRD,
+		// 创建crd用的client
+		KubeExtCli: k8sutil.MustNewKubeExtClient(),
+		// 与k8s交互的client：etcd custome resource client
+		EtcdCRCli: client.MustNewInCluster(),
+		CreateCRD: createCRD,
 	}
 
 	return cfg
@@ -173,6 +190,7 @@ func newControllerConfig() controller.Config {
 func getMyPodServiceAccount(kubecli kubernetes.Interface) (string, error) {
 	var sa string
 	err := retryutil.Retry(5*time.Second, 100, func() (bool, error) {
+		// 获取default下的etcd-operator-55978c4587-7r8dn的对象
 		pod, err := kubecli.CoreV1().Pods(namespace).Get(name, metav1.GetOptions{})
 		if err != nil {
 			logrus.Errorf("fail to get operator pod (%s): %v", name, err)
