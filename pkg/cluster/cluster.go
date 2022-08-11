@@ -86,7 +86,9 @@ type Cluster struct {
 }
 
 func New(config Config, cl *api.EtcdCluster) *Cluster {
+	// 打印日志
 	lg := logrus.WithField("pkg", "cluster").WithField("cluster-name", cl.Name).WithField("cluster-namespace", cl.Namespace)
+	// 健壮性代码
 	if len(cl.Name) > k8sutil.MaxNameLength || len(cl.ClusterName) > k8sutil.MaxNameLength {
 		return nil
 	}
@@ -101,8 +103,11 @@ func New(config Config, cl *api.EtcdCluster) *Cluster {
 		eventsCli: config.KubeCli.Core().Events(cl.Namespace),
 	}
 
+	// 起一个协程创建集群
 	go func() {
+		// setup()创建第一个etcd实例
 		if err := c.setup(); err != nil {
+			// 健壮性代码
 			c.logger.Errorf("cluster failed to setup: %v", err)
 			if c.status.Phase != api.ClusterPhaseFailed {
 				c.status.SetReason(err.Error())
@@ -113,6 +118,7 @@ func New(config Config, cl *api.EtcdCluster) *Cluster {
 			}
 			return
 		}
+		//调整集群状态（创建或删除成员节点）直到达到spec描述的状态
 		c.run()
 	}()
 
@@ -122,6 +128,7 @@ func New(config Config, cl *api.EtcdCluster) *Cluster {
 func (c *Cluster) setup() error {
 	var shouldCreateCluster bool
 	switch c.status.Phase {
+	//在此创建集群为true
 	case api.ClusterPhaseNone:
 		shouldCreateCluster = true
 	case api.ClusterPhaseCreating:
@@ -132,7 +139,7 @@ func (c *Cluster) setup() error {
 	default:
 		return fmt.Errorf("unexpected cluster phase: %s", c.status.Phase)
 	}
-
+	// 没看
 	if c.isSecureClient() {
 		d, err := k8sutil.GetTLSDataFromSecret(c.config.KubeCli, c.cluster.Namespace, c.cluster.Spec.TLS.Static.OperatorSecret)
 		if err != nil {
@@ -144,6 +151,7 @@ func (c *Cluster) setup() error {
 		}
 	}
 
+	// 在此处创建集群
 	if shouldCreateCluster {
 		return c.create()
 	}
@@ -151,24 +159,28 @@ func (c *Cluster) setup() error {
 }
 
 func (c *Cluster) create() error {
+	// 设置集群的阶段为创建中
 	c.status.SetPhase(api.ClusterPhaseCreating)
-
+	// 没看懂
 	if err := c.updateCRStatus(); err != nil {
 		return fmt.Errorf("cluster create: failed to update cluster phase (%v): %v", api.ClusterPhaseCreating, err)
 	}
+	// 没看
 	c.logClusterCreation()
 
+	// 重点：创建第一个etcd节点
 	return c.prepareSeedMember()
 }
 
 func (c *Cluster) prepareSeedMember() error {
+	// 待看
 	c.status.SetScalingUpCondition(0, c.cluster.Spec.Size)
-
+	// 重点：在此处创建第一个etcd实例
 	err := c.bootstrap()
 	if err != nil {
 		return err
 	}
-
+	// 待看
 	c.status.Size = 1
 	return nil
 }
@@ -320,6 +332,7 @@ func (c *Cluster) startSeedMember() error {
 		m.ClusterDomain = c.cluster.Spec.Pod.ClusterDomain
 	}
 	ms := etcdutil.NewMemberSet(m)
+	// 重点：在此处创建第一个 etcd 实例
 	if err := c.createPod(ms, m, "new"); err != nil {
 		return fmt.Errorf("failed to create seed member (%s): %v", m.Name, err)
 	}
@@ -370,7 +383,10 @@ func (c *Cluster) isPodPVEnabled() bool {
 }
 
 func (c *Cluster) createPod(members etcdutil.MemberSet, m *etcdutil.Member, state string) error {
+	// 重点：！！！设置pod的创建规则
 	pod := k8sutil.NewEtcdPod(m, members.PeerURLPairs(), c.cluster.Name, state, uuid.New(), c.cluster.Spec, c.cluster.AsOwner())
+
+	// PVE是啥？不懂，没看
 	if c.isPodPVEnabled() {
 		pvc := k8sutil.NewEtcdPodPVC(m, *c.cluster.Spec.Pod.PersistentVolumeClaimSpec, c.cluster.Name, c.cluster.Namespace, c.cluster.AsOwner())
 		_, err := c.config.KubeCli.CoreV1().PersistentVolumeClaims(c.cluster.Namespace).Create(pvc)
@@ -381,6 +397,7 @@ func (c *Cluster) createPod(members etcdutil.MemberSet, m *etcdutil.Member, stat
 	} else {
 		k8sutil.AddEtcdVolumeToPod(pod, nil)
 	}
+	// 重点：创建etcd实例的实际请求
 	_, err := c.config.KubeCli.CoreV1().Pods(c.cluster.Namespace).Create(pod)
 	return err
 }

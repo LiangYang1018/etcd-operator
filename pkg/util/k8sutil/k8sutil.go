@@ -324,7 +324,7 @@ func newEtcdPod(m *etcdutil.Member, initialCluster []string, clusterName, state,
 	readinessProbe.TimeoutSeconds = 5
 	readinessProbe.PeriodSeconds = 5
 	readinessProbe.FailureThreshold = 3
-
+	//重点：此处设置etcd实例的配置Repository；Version
 	container := containerWithProbes(
 		etcdContainer(strings.Split(commands, " "), cs.Repository, cs.Version),
 		livenessProbe,
@@ -390,6 +390,7 @@ func newEtcdPod(m *etcdutil.Member, initialCluster []string, clusterName, state,
 						sleep 1
 					done`, DNSTimeout, m.Addr())},
 			}},
+			// 重点：此处创建etcd实例
 			Containers:    []v1.Container{container},
 			RestartPolicy: v1.RestartPolicyNever,
 			Volumes:       volumes,

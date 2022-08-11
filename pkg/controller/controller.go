@@ -65,12 +65,14 @@ func New(cfg Config) *Controller {
 
 // handleClusterEvent returns true if cluster is ignored (not managed) by this instance.
 func (c *Controller) handleClusterEvent(event *Event) (bool, error) {
+	// 重点：clus是集群的详细信息，其中就包括spec
 	clus := event.Object
 
+	//没看懂
 	if !c.managed(clus) {
 		return true, nil
 	}
-
+	// 似乎是健壮性代码，没看
 	if clus.Status.IsFailed() {
 		clustersFailed.Inc()
 		if event.Type == kwatch.Deleted {
@@ -79,26 +81,31 @@ func (c *Controller) handleClusterEvent(event *Event) (bool, error) {
 		}
 		return false, fmt.Errorf("ignore failed cluster (%s). Please delete its CR", clus.Name)
 	}
-
+	// 设置集群的默认值，包括etcd版本和仓库
 	clus.SetDefaults()
 
+	// 验证spec,没细看
 	if err := clus.Spec.Validate(); err != nil {
 		return false, fmt.Errorf("invalid cluster spec. please fix the following problem with the cluster spec: %v", err)
 	}
 
 	switch event.Type {
+	// 创建集群会触发added事件
 	case kwatch.Added:
+		//判断该集群是否已经创建
 		if _, ok := c.clusters[getNamespacedName(clus)]; ok {
 			return false, fmt.Errorf("unsafe state. cluster (%s) was created before but we received event (%s)", clus.Name, event.Type)
 		}
-
+		// 重点：在这一步中实际创建集群
 		nc := cluster.New(c.makeClusterConfig(), clus)
 		if nc == nil {
 			return false, fmt.Errorf("cluster name cannot be more than %v characters long, please delete the CR\n", k8sutil.MaxNameLength)
 		}
+		//将新创建的集群加入controller的clusters成员
 		c.clusters[getNamespacedName(clus)] = nc
-
+		//已经创建的集群+1 prometheus 监控用
 		clustersCreated.Inc()
+		//集群总数+1 prometheus 监控用
 		clustersTotal.Inc()
 
 	case kwatch.Modified:
