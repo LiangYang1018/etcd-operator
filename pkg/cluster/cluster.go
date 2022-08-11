@@ -180,7 +180,7 @@ func (c *Cluster) prepareSeedMember() error {
 	if err != nil {
 		return err
 	}
-	// 待看
+	// 重点：待看
 	c.status.Size = 1
 	return nil
 }
@@ -331,6 +331,7 @@ func (c *Cluster) startSeedMember() error {
 	if c.cluster.Spec.Pod != nil {
 		m.ClusterDomain = c.cluster.Spec.Pod.ClusterDomain
 	}
+	// 重点！！！创建memberset,并且将member放入set
 	ms := etcdutil.NewMemberSet(m)
 	// 重点：在此处创建第一个 etcd 实例
 	if err := c.createPod(ms, m, "new"); err != nil {
