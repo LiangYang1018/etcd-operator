@@ -39,6 +39,8 @@ type Member struct {
 }
 
 func (m *Member) Addr() string {
+	// 当你创建一个Service时，Kubernetes会自动创建一个形如<service-name>.<namespace-name>.svc.cluster.local的DNS项。
+	// https://blog.csdn.net/luanpeng825485697/article/details/84108166
 	return fmt.Sprintf("%s.%s.%s.svc%s", m.Name, clusterNameFromMemberName(m.Name), m.Namespace, m.ClusterDomain)
 }
 

@@ -298,6 +298,7 @@ func NewEtcdPodPVC(m *etcdutil.Member, pvcSpec v1.PersistentVolumeClaimSpec, clu
 }
 
 func newEtcdPod(m *etcdutil.Member, initialCluster []string, clusterName, state, token string, cs api.ClusterSpec) *v1.Pod {
+	// etcd实例启动时命令
 	commands := fmt.Sprintf("/usr/local/bin/etcd --data-dir=%s --name=%s --initial-advertise-peer-urls=%s "+
 		"--listen-peer-urls=%s --listen-client-urls=%s --advertise-client-urls=%s "+
 		"--initial-cluster=%s --initial-cluster-state=%s",
@@ -308,6 +309,7 @@ func newEtcdPod(m *etcdutil.Member, initialCluster []string, clusterName, state,
 	if m.SecureClient {
 		commands += fmt.Sprintf(" --client-cert-auth=true --trusted-ca-file=%[1]s/server-ca.crt --cert-file=%[1]s/server.crt --key-file=%[1]s/server.key", serverTLSDir)
 	}
+	// 如果是新建集群，则要设置token
 	if state == "new" {
 		commands = fmt.Sprintf("%s --initial-cluster-token=%s", commands, token)
 	}
@@ -324,7 +326,7 @@ func newEtcdPod(m *etcdutil.Member, initialCluster []string, clusterName, state,
 	readinessProbe.TimeoutSeconds = 5
 	readinessProbe.PeriodSeconds = 5
 	readinessProbe.FailureThreshold = 3
-	//重点：此处设置etcd实例的配置Repository；Version
+	//重点：此处设置etcd实例的配置cmd, Repository, Version
 	container := containerWithProbes(
 		etcdContainer(strings.Split(commands, " "), cs.Repository, cs.Version),
 		livenessProbe,
@@ -372,7 +374,10 @@ func newEtcdPod(m *etcdutil.Member, initialCluster []string, clusterName, state,
 				// More info: https://github.com/docker-library/busybox/issues/27
 				//Image default: "busybox:1.28.0-glibc",
 				Image: imageNameBusybox(cs.Pod),
-				Name:  "check-dns",
+				// 当创建一个Service时，Kubernetes会自动创建一个形如<service-name>.<namespace-name>.svc.cluster.local的DNS项。
+				// busybox的作用就是检查pod的hostname是否已经就绪
+				// 这篇文章解释来为啥要check dns: https://github.com/coreos/etcd-operator/issues/2160
+				Name: "check-dns",
 				// In etcd 3.2, TLS listener will do a reverse-DNS lookup for pod IP -> hostname.
 				// If DNS entry is not warmed up, it will return empty result and peer connection will be rejected.
 				// In some cases the DNS is not created correctly so we need to time out after a given period.

@@ -331,7 +331,7 @@ func (c *Cluster) startSeedMember() error {
 	if c.cluster.Spec.Pod != nil {
 		m.ClusterDomain = c.cluster.Spec.Pod.ClusterDomain
 	}
-	// 重点！！！创建memberset,并且将member放入set
+	// 重点！！！创建memberset,并且将seed member放入set
 	ms := etcdutil.NewMemberSet(m)
 	// 重点：在此处创建第一个 etcd 实例
 	if err := c.createPod(ms, m, "new"); err != nil {
