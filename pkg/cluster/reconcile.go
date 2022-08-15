@@ -102,14 +102,15 @@ func (c *Cluster) reconcileMembers(running etcdutil.MemberSet) error {
 }
 
 func (c *Cluster) resize() error {
+	//集群数量达到spec要求的数量，返回：集群创建完毕
 	if c.members.Size() == c.cluster.Spec.Size {
 		return nil
 	}
-
+	//集群的数量小于spec要求的数量，加一个成员
 	if c.members.Size() < c.cluster.Spec.Size {
 		return c.addOneMember()
 	}
-
+	//集群的数量大于spec要求的数量，减一个成员
 	return c.removeOneMember()
 }
 
